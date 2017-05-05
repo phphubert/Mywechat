@@ -343,8 +343,7 @@
                                 $this->getvoice_download($msgid);
                                 break;
                             case 43://视频
-                                $res['AddMsgList'][$k]['Content'] = sprintf("<img height='50px' width='50px' src='upload/%s.jpg'/>",$msgid);
-                                $this->getimage($msgid);
+                                $res['AddMsgList'][$k]['Content'] = sprintf('<video src="upload/mp4/%s.mp4" width="320" height="200" controls preload></video>',$msgid);
                                 $this->webwxgetvoice_download($msgid);
                                 break;
                              case 47: // 动画表情
@@ -587,7 +586,7 @@
                 $apihost = $udata['apihost'];
                 
                 $apihost = $udata['apihost'];
-                $url = sprintf('https://%s/webwxgetvideo?msgid=%s&skey=',$apihost, $msgid);
+                $url = sprintf('https://%s/cgi-bin/mmwebwx-bin/webwxgetvideo?msgid=%s&skey=',$apihost, $msgid);
                 $header = array(
                       'Range:bytes=0-'
                 );
