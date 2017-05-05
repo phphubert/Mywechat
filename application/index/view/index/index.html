@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>wechat system</title>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<link rel="stylesheet" type="text/css" href="/static/themes/default/easyui.css">
+	<link rel="stylesheet" type="text/css" href="/static/themes/icon.css">
+        <link rel="stylesheet" type="text/css" href="static/common.css">
+        <script type="text/javascript" src="/static/jquery-1.8.0.js"></script>
+	<script type="text/javascript" src="/static/jquery.easyui.min.js"></script>
+        <script type="text/javascript" src="/static/common.js"></script> 
+        <script type="text/javascript" src="/static/layer/layer.js"></script>
+    </head>
+ 
+    <body>
+    <div id="cc" class="easyui-layout" style="width:100%;height:1000px;">
+        <div data-options="region:'north',title:'微信网页版',split:true" style="height:100px;"></div>
+        <div data-options="region:'east',title:'East',split:true" style="width:100px;"></div>
+        <div data-options="region:'west',title:'添加微信号',split:true" style="width:100px;padding:10px;">
+                 <a href="#" class="easyui-linkbutton" id='login'>登录微信</a>
+                 <div class="uusers">
+                     <ul>
+ 
+                         
+                     </ul>
+                 </div>
+        </div>
+        <div data-options="region:'center'" style="">
+        <div class="easyui-layout" data-options="fit:true">  
+             <!-- 布局中如果不需要west这个面板，那么可以删掉这个div -->  
+             <div data-options="region:'west',title:'好友列表',split:true" style="width:200px;" class="m-list">
+ 
+             </div>
+             <!--north，south， east，west这几个面板都可以删掉，唯有这个center面板一定不能删掉，否则使用easyui-layout就会出错 --> 
+             <div data-options="region:'center'" style="padding:5px;">
+                    <div class="easyui-panel" title="聊天窗口" iconCls="icon-search" collapsible="true" style="padding:5px;width:100%;height:95%;">
+                           <h3 align='center' class="to-user" username=""></h3>
+                            <div class="easyui-layout" fit="true">
+                    
+                                    <div region="center" border="false">
+                                            <div class="easyui-layout" fit="true">               
+                                                    <div region="center" border="false" style="border:1px solid #ccc;">
+                                                            <div class="easyui-layout" fit="true">
+                                                                    <div region="south" split="true" border="true" style="height:25%;">
+                                                                            <form id="uploadForm" enctype="multipart/form-data">
+                                                                                <a href="javascript:;" class="a-upload"><input  type="file" id="uploadfile" name="uploadfile" style="" accept="image/gif, image/jpeg, image/png"/>
+                                                                                   点击这里上传图片（文件）
+                                                                                </a>
+                                                                            </form>
+                                                                            <textarea style="border:0;width:100%;height:100%;resize:none"  placeholder="按 Ctrl + Enter 发送" class="input"></textarea>
+                                                                    </div>
+                                                                    <div region="center" border="false">
+                                                                        <div class="m-message">
+                        
+                                                                        </div>
+                                                                    </div>
+                                                            </div>
+                                                    </div>
+                                            </div>
+                                    </div>
+                            </div>
+                    </div>
+             </div>  
+         </div>  
+        </div>
+    </div>
+    </body>
+    <script type="text/javascript">
+        function pushuuid(uuid){
+            if(sessionStorage.uuids ==undefined){
+                sessionStorage.uuids = JSON.stringify([uuid]);
+            }else{
+                var uuids = JSON.parse(sessionStorage.uuids);
+                uuids.push(uuid);
+                sessionStorage.uuids = JSON.stringify(uuids);
+            }
+            init(uuid);
+            getfriends(uuid);
+            sync(uuid);
+            setInterval("synccheck('"+uuid+"')",30000);
+            console.log(sessionStorage.uuids);
+            sessionStorage.curentuuid = uuid;//当前操作的登录标识
+        }
+        
+  
+        function synccheck(uuid){
+            $.ajax({
+                url : "/index.php/Index/index/synccheck",
+                datatype:'json',
+                type:'post',
+                data : {uuid:uuid},
+                success : function(data){
+                    console.log(data);
+                }  
+            });
+        }
+ 
+        
+        function init(uuid){
+            $.ajax({
+                               url : "/index.php/Index/index/init",
+                               datatype : 'json',
+                               type : 'post',
+                               async : false,
+                               data : {uuid:uuid},
+                               success : function(data){
+                                       var res = JSON.parse(data);
+                                       var myheadimg = '/index.php/Index/index/avatar?uuid='+uuid+'&uri=' + escape(res.User.HeadImgUrl);
+                                       sessionStorage[uuid+'headimg'] = myheadimg;
+                                       sessionStorage[uuid+'NickName'] = res.User.NickName;
+                                       sessionStorage[uuid+'username'] = res.User.UserName;
+                                       //登陆用户信息
+                                       var ustr = '<header>'
+                                        +'<img class="avatar" width="40" height="40" alt="Coffce" src="'+ myheadimg +'">'
+                                        +'<p class="name">'+ res.User.NickName +'</p>'
+                                            +'</header>';
+                                      
+                                       $('.uusers ul').append('<li uuid="'+uuid+'">'+ustr+'</li>');
+                               },
+                               error : function(data){
+                                       console.log(data);
+                               }
+                 });
+        }
+        
+        
+        $('.uusers ul li').live('click',function(){
+     
+            var uuid = $(this).attr('uuid');
+            $('.m-list ul[uuid="'+uuid+'"]').show().siblings().hide();
+            $('.m-message ul').hide();
+            $('.to-user').text('');
+            sessionStorage.curentuuid = uuid;
+        });
+        
+        
+        
+        function getfriends(uuid){
+                //获取所有好友列表
+                $.ajax({
+                        url : "/index.php/Index/index/users",
+                        datatype : 'json',
+                        type : 'post',
+                        async : false,
+                        data : {uuid:uuid},
+                        success : function(data){
+                                var res = JSON.parse(data);
+                                console.log(res);
+                                //遍历初始化返回的好友和公众号
+                                var userlist = res.MemberList;	
+                                var str = '';
+                                for (var key in userlist) {
+                                        var img = '/index.php/Index/index/avatar?uuid='+uuid+'&uri=' + escape(userlist[key].HeadImgUrl);
+                                        var uname = userlist[key].UserName;
+                                        var nickname = userlist[key].NickName;
+                                        str += '<li class="active" username="'+ uname +'">'
+                                        +'<img class="avatar" width="30" height="30"  src="'+img+'" />'
+                                        +'<p class="name">'+ nickname +'</p>'
+                                                +'</li>'; 
+                                }
+                                
+                     
+                                if($('.m-list ul[uuid="'+uuid+'"]').length == 0){
+                                     var ul = $("<ul uuid='"+uuid+"'>"+str+"</ul>");
+                                        $(".m-list").append(ul);
+                                        ul.show().siblings().hide();
+                                }else{
+                                       $("<ul uuid='"+uuid+"'>"+str+"</ul>").append(str).show().siblings().hide();
+                                }
+                                
+                               
+
+                                
+ 
+//                                $(".m-list ul").append(str);
+                                //滚动到底部
+                                //$(".m-message").scrollTop($('.m-message ul')[0].scrollHeight);
+                        },
+                        error : function(data){
+                                console.log(data);
+                        }
+                        });
+                //获取好友列表结束
+        }
+        
+        
+	function sync(uuid){
+ 		//同步服务器信息，轮训查询是否有新消息等
+		$.ajax({
+			url : "/index.php/Index/index/sync",
+			datatype : 'json',
+			type : 'post',
+			data : {uuid:uuid},
+			success : function(data){
+				var res = JSON.parse(data);
+                                if(res != undefined ){
+                                        if(res.BaseResponse.Ret != 0){
+                                                alert('与微信服务器通讯出错，请重新扫码登陆！');
+
+                                        }else if (res.AddMsgCount) {
+                                                console.log(res);
+
+                                                var str = '';
+                                                var messagelist = res.AddMsgList;
+
+                                                for (var key in messagelist) {
+                                                        //StatusNotifyCode=2 为通知消息
+                                                        if (messagelist[key].StatusNotifyCode == 0){
+                                                                    var fname = messagelist[key].FromUserName;
+                                                                    var username;
+
+                                                                    if(messagelist[key].Fromgroupuname !=undefined)
+                                                                        username = messagelist[key].Fromgroupuname;
+                                                                    else
+                                                                        username = fname;
+
+                                                                    if(messagelist[key].noexist !=undefined && messagelist[key].noexist==1){
+                                                                           var uname = fname.indexOf('@@')>-1?fname:messagelist[key].ToUserName;
+                                                                           if($('.m-list ul[uuid="'+uuid+'"] li[username="'+uname+'"]').length==0){
+                                                                                    var img = '/index.php/Index/index/avatar?uuid='+uuid+'&uri=' + escape(messagelist[key].groupicon);
+                                                                                    var nickname = messagelist[key].groupname;
+                                                                                    var html='';
+                                                                                    html += '<li class="active" username="'+ uname +'">'
+                                                                                    +'<img class="avatar" width="30" height="30"  src="'+img+'" />'
+                                                                                    +'<p class="name">'+ nickname +'</p>'
+                                                                                    +'</li>';
+                                                                                    $('.m-list ul[uuid="'+uuid+'"]').append(html);
+                                                                            }
+                                                                    }
+
+                                                                    var ToUserName = messagelist[key].ToUserName; 
+
+                                                                    var uri = "/cgi-bin/mmwebwx-bin/webwxgeticon?seq=620940058&username="+ username +"&skey=";
+                                                                    var userHeadimg = '/index.php/Index/index/avatar?uuid='+uuid+'&uri=' + escape(uri);
+                                                                                    str += '<li>'
+                                                                    +'<p class="time"><span></span></p>'
+                                                                    +'<div class="main">'
+                                                                    +'<img class="avatar" width="30" height="30" src="'+ userHeadimg +'">'
+                                                                    +'<div class="nick">'+ messagelist[key].NickName +'</div>'
+                                                                    +'<div class="text">'+ messagelist[key].Content +'</div>'
+                                                                    +'</div>'
+                                                                    +'</li>';
+                                                        }
+                                                }
+                                                //for end
+
+                                               if(sessionStorage[uuid+'username'] == fname){
+                                                    fname =ToUserName;
+                                               }
+
+                                                if($('.m-message ul[FromUserName="'+fname+'"]').length>0){
+                                                     $('.m-message ul[FromUserName="'+fname+'"]').append(str);
+                                                }else{
+                                                     var ul = $("<ul FromUserName='"+fname+"'>"+str+"</ul>").hide();
+                                                     $(".m-message").append(ul);
+                                                }
+                                                var first =$('.m-list ul[uuid="'+uuid+'"] li:first');
+                                                if(first.attr('username') != fname){
+                                                     first.before($('.m-list ul[uuid="'+uuid+'"] li[username="'+fname+'"]'));
+                                                }
+                                        }
+                                        //通讯成功再轮询
+                                        if (res.BaseResponse.Ret == 0){
+                                           sync(uuid);
+                                        }
+                                }else{
+                                    sync(uuid);
+                                }
+			},
+			error : function(data){
+			}
+		})
+
+	//}
+	}
+        
+        $(".m-list ul li").live('click',function(){
+		var username = $(this).attr('username');
+		var nickname = $(this).children('p.name').text();
+              
+ 		$('.to-user').attr('username',username);
+ 		$('.to-user').text(nickname);
+                createmsgbox(username);
+        });
+        
+        
+ 
+        
+        function createmsgbox(toUsername){
+                        var ful = $('.m-message ul[FromUserName="'+toUsername+'"]')
+                        if(ful.length == 0){
+                             var ul = $("<ul FromUserName='"+toUsername+"'></ul>");
+                             $(".m-message").append(ul);
+                             ul.show().siblings().hide();
+                        }else{
+                            ful.show().siblings().hide();
+                        }
+        }
+        
+        
+        
+        
+	$(".input").keypress(function(e) {
+		//firefox enter code=13 ; chrome = 10		
+		if (e.ctrlKey && (e.which == 13 || e.which == 10)){
+			var text = $(".input").val();
+			var toUsername = $('.to-user').attr('username');
+			if(text == ''){
+				alert('不能发送空内容！');
+				return;
+			}
+			if(toUsername == ''){
+				alert('点击左侧头像，选择聊天对象！');
+				return;
+			}
+                        uuid = sessionStorage.curentuuid;
+                        
+
+			$.ajax({
+				url : "/index.php/Index/index/send",
+				datatype : 'json',
+				type : 'post',
+				data : {
+					toUsername:toUsername,
+					content:text,
+                                        uuid:uuid
+				},
+				success : function(data){
+					var res = JSON.parse(data);
+					
+					if(res.BaseResponse.Ret == 0){
+                                            var myheadimg = sessionStorage[uuid+'headimg'];
+                                            var nickname = sessionStorage[uuid+'NickName']
+                                         
+						var str = '<li>'
+                                                +'<p class="time"><span></span></p>'
+                                                +'<div class="main self">'
+                                                +'<img class="avatar" width="30" height="30" src="'+ myheadimg +'">'
+                                                +'<div class="nick">'+ nickname +'</div>'
+                                                +'<div class="text">'+ text +'</div>'
+                                                +'</div>'
+                                                        +'</li>';
+  
+                                                 if($('.m-message ul[FromUserName="'+toUsername+'"]').length>0){
+                                                     $('.m-message ul[FromUserName="'+toUsername+'"]').append(str).show().siblings().hide();
+                                                 }else{
+                                                      var ul = $("<ul FromUserName='"+toUsername+"'>"+str+"</ul>");
+                                                      $(".m-message ul").hide();
+                                                      $(".m-message").append(ul);
+                                                 }
+ 
+					}
+					
+				},
+				error : function(data){
+					console.log(data);
+				}
+			});
+			//ws.send(content);
+			$(".input").val('').focus();
+		}
+	});
+        
+        
+       $("#uploadfile").change(function(){
+                var uuid =  sessionStorage.curentuuid;
+                var toUsername = $('.to-user').attr('username');
+                if(toUsername == ''){
+                        alert('发送人不能为空！');
+                        return;
+                }
+                
+                $.ajax({
+                    url: 'index.php/Index/index/sendimage?uuid='+uuid+'&toUsername='+toUsername,
+                    type: 'POST',
+                    cache: false,
+                    data: new FormData($('#uploadForm')[0]),
+                    processData: false,
+                    contentType: false
+                }).done(function(res) {
+                    var res = JSON.parse(res);
+                    if(res.status != undefined && res.status =='1'){
+                            var myheadimg = sessionStorage[uuid+'headimg'];
+                            var nickname = sessionStorage[uuid+'NickName'];
+                            if(res.image != undefined){
+                                    var str = '<li>'
+                                                              +'<p class="time"><span></span></p>'
+                                                              +'<div class="main self">'
+                                                              +'<img class="avatar" width="30" height="30" src="'+ myheadimg +'">'
+                                                              +'<div class="nick">'+  nickname +'</div>'
+                                                              +'<div class="text">'+ '<img style=\'max-height:100px;max-width:100px;padding-top: 9px;\' src="'+res.image+'" />' +'</div>'
+                                                              +'</div>'
+                                                                      +'</li>';
+
+                                                              if($('.m-message ul[FromUserName="'+toUsername+'"]').length>0){
+                                                                  $('.m-message ul[FromUserName="'+toUsername+'"]').append(str).show().siblings().hide();
+                                                              }else{
+                                                                   var ul = $("<ul FromUserName='"+toUsername+"'>"+str+"</ul>");
+                                                                   $(".m-message ul").hide();
+                                                                   $(".m-message").append(ul);
+                                                              }
+                            }else{
+                                    layer.msg('文件发送成功');
+                            }
+                      
+                                
+                   }
+                    
+                    
+                }).fail(function(res) {});
+           
+        });
+        
+ 
+        $(function(){
+            if(sessionStorage.uuids !=undefined){
+                var uuids = JSON.parse(sessionStorage.uuids);
+                for(var i in uuids){
+                    init(uuids[i]);
+                    getfriends(uuids[i]);
+                    sync(uuids[i]);
+                    setInterval("synccheck('"+uuids[i]+"')",30000);
+                }
+            }
+ 
+        })
+
+    </script>
+    
+ 
+</html>

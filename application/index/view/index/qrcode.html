@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title></title>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <script type="text/javascript" src="/static/jquery-1.8.0.js"></script>
+        <script type="text/javascript" src="/static/common.js"></script> 
+        <script type="text/javascript" src="/static/layer/layer.js"></script>
+        
+    </head>
+    <body>
+            <h3 align="center">微信网页版</h3>
+            <p align="center"><img src="{$url}" /></p>
+            <p align="center" class="notice">请扫描二维码登录</p>
+    </body>
+    <script type="text/javascript">
+        //将用户uuid存入本地缓存
+        var uuid = "{$uuid}";
+        sessionStorage.uuid = uuid;
+        getLoginStatus();
+        function getLoginStatus(){
+          $.ajax({
+                  url: '/index.php/Index/index/status?uuid=' + uuid,
+                  data: '',
+                  dataType: 'json',
+                  success: function(data){
+                                if(data.status == 1){
+                                        getLoginStatus();
+                                        $(".notice").html('扫描成功，请确认登录');
+                                }else if (data.status == 2) {
+                                        //&fun=new&version=v2&lang=zh_CN 不加的话会返回1101错误代码
+                                          data.msg +='&fun=new&version=v2&lang=zh_CN'
+                                         $.post('/index.php/Index/Index/cookies',{'url':data.msg},function(res){
+                                                    
+                                                    console.log(res);
+                                                    if (res.status == 0){
+                                                            alert(res.msg);
+                                                    }else{
+                                                            var index = parent.layer.getFrameIndex(window.name); //获取窗口索引
+                                                            parent.pushuuid(uuid);
+                                                            parent.layer.close(index);
+                                                            
+                                                              
+                                                    }
+                                         },'json');
+
+                                }else{
+                                        $(".notice").html('请扫描二维码确认登录');
+                                        getLoginStatus();
+                                }
+                  },
+                  error: function(data){
+                        getLoginStatus();
+                        console.log('获取登录状态错误');
+                  }
+        })
+        }
+    </script>
+    
+</html>
