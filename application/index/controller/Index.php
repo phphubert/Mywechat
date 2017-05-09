@@ -80,7 +80,7 @@ class Index extends Controller
             $toUsername = Request::instance()->request('toUsername');
             $content = Request::instance()->request('content');
             $res = $this->wechat->sendMessage($toUsername,$content);
-            exit($res);
+            exit(json_encode($res));
     }
     
     public function sendimage(){//发送图片
@@ -127,7 +127,7 @@ class Index extends Controller
     }
  
     public function test(){
- 
+       
     }
     
  

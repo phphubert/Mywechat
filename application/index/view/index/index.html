@@ -6,7 +6,7 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<link rel="stylesheet" type="text/css" href="/static/themes/default/easyui.css">
 	<link rel="stylesheet" type="text/css" href="/static/themes/icon.css">
-        <link rel="stylesheet" type="text/css" href="static/common.css">
+        <link rel="stylesheet" type="text/css" href="/static/common.css">
         <script type="text/javascript" src="/static/jquery-1.8.0.js"></script>
 	<script type="text/javascript" src="/static/jquery.easyui.min.js"></script>
         <script type="text/javascript" src="/static/common.js"></script> 
@@ -48,11 +48,11 @@
                                                                                    点击这里上传图片（文件）
                                                                                 </a>
                                                                             </form>
-                                                                            <textarea style="border:0;width:100%;height:100%;resize:none"  placeholder="按 Ctrl + Enter 发送" class="input"></textarea>
+                                                                            <textarea style="border:0;width:98%;height:95%;resize:none"  placeholder="按 Ctrl + Enter 发送" class="input"></textarea>
                                                                     </div>
-                                                                    <div region="center" border="false">
+                                                                    <div region="center" border="false" class="m-content">
                                                                         <div class="m-message">
-                        
+                                                                            
                                                                         </div>
                                                                     </div>
                                                             </div>
@@ -148,7 +148,8 @@
                                 var res = JSON.parse(data);
                                 console.log(res);
                                 //遍历初始化返回的好友和公众号
-                                var userlist = res.MemberList;	
+                                var userlist = res.MemberList;//联系人
+                                var GroupList = res.GroupList;//群
                                 var str = '';
                                 for (var key in userlist) {
                                         var img = '/index.php/Index/index/avatar?uuid='+uuid+'&uri=' + escape(userlist[key].HeadImgUrl);
@@ -160,6 +161,17 @@
                                                 +'</li>'; 
                                 }
                                 
+                                for (var key in GroupList) {
+                                        var img = '/index.php/Index/index/avatar?uuid='+uuid+'&uri=' + escape(GroupList[key].HeadImgUrl);
+                                        var uname = GroupList[key].UserName;
+                                        var nickname = GroupList[key].NickName;
+                                        str += '<li class="active" username="'+ uname +'">'
+                                        +'<img class="avatar" width="30" height="30"  src="'+img+'" />'
+                                        +'<p class="name">'+ nickname +'</p>'
+                                                +'</li>'; 
+                                }
+                                
+                                
                      
                                 if($('.m-list ul[uuid="'+uuid+'"]').length == 0){
                                      var ul = $("<ul uuid='"+uuid+"'>"+str+"</ul>");
@@ -168,14 +180,6 @@
                                 }else{
                                        $("<ul uuid='"+uuid+"'>"+str+"</ul>").append(str).show().siblings().hide();
                                 }
-                                
-                               
-
-                                
- 
-//                                $(".m-list ul").append(str);
-                                //滚动到底部
-                                //$(".m-message").scrollTop($('.m-message ul')[0].scrollHeight);
                         },
                         error : function(data){
                                 console.log(data);
@@ -194,79 +198,71 @@
 			data : {uuid:uuid},
 			success : function(data){
 				var res = JSON.parse(data);
-                                if(res != undefined ){
-                                        if(res.BaseResponse.Ret != 0){
-                                                alert('与微信服务器通讯出错，请重新扫码登陆！');
-
-                                        }else if (res.AddMsgCount) {
-                                                console.log(res);
-
-                                                var str = '';
-                                                var messagelist = res.AddMsgList;
-
-                                                for (var key in messagelist) {
-                                                        //StatusNotifyCode=2 为通知消息
-                                                        if (messagelist[key].StatusNotifyCode == 0){
-                                                                    var fname = messagelist[key].FromUserName;
-                                                                    var username;
-
-                                                                    if(messagelist[key].Fromgroupuname !=undefined)
-                                                                        username = messagelist[key].Fromgroupuname;
-                                                                    else
-                                                                        username = fname;
-
-                                                                    if(messagelist[key].noexist !=undefined && messagelist[key].noexist==1){
-                                                                           var uname = fname.indexOf('@@')>-1?fname:messagelist[key].ToUserName;
-                                                                           if($('.m-list ul[uuid="'+uuid+'"] li[username="'+uname+'"]').length==0){
-                                                                                    var img = '/index.php/Index/index/avatar?uuid='+uuid+'&uri=' + escape(messagelist[key].groupicon);
-                                                                                    var nickname = messagelist[key].groupname;
-                                                                                    var html='';
-                                                                                    html += '<li class="active" username="'+ uname +'">'
-                                                                                    +'<img class="avatar" width="30" height="30"  src="'+img+'" />'
-                                                                                    +'<p class="name">'+ nickname +'</p>'
-                                                                                    +'</li>';
-                                                                                    $('.m-list ul[uuid="'+uuid+'"]').append(html);
-                                                                            }
-                                                                    }
-
-                                                                    var ToUserName = messagelist[key].ToUserName; 
-
-                                                                    var uri = "/cgi-bin/mmwebwx-bin/webwxgeticon?seq=620940058&username="+ username +"&skey=";
-                                                                    var userHeadimg = '/index.php/Index/index/avatar?uuid='+uuid+'&uri=' + escape(uri);
-                                                                                    str += '<li>'
-                                                                    +'<p class="time"><span></span></p>'
-                                                                    +'<div class="main">'
-                                                                    +'<img class="avatar" width="30" height="30" src="'+ userHeadimg +'">'
-                                                                    +'<div class="nick">'+ messagelist[key].NickName +'</div>'
-                                                                    +'<div class="text">'+ messagelist[key].Content +'</div>'
-                                                                    +'</div>'
-                                                                    +'</li>';
-                                                        }
-                                                }
-                                                //for end
-
-                                               if(sessionStorage[uuid+'username'] == fname){
-                                                    fname =ToUserName;
-                                               }
-
-                                                if($('.m-message ul[FromUserName="'+fname+'"]').length>0){
-                                                     $('.m-message ul[FromUserName="'+fname+'"]').append(str);
-                                                }else{
-                                                     var ul = $("<ul FromUserName='"+fname+"'>"+str+"</ul>").hide();
-                                                     $(".m-message").append(ul);
-                                                }
-                                                var first =$('.m-list ul[uuid="'+uuid+'"] li:first');
-                                                if(first.attr('username') != fname){
-                                                     first.before($('.m-list ul[uuid="'+uuid+'"] li[username="'+fname+'"]'));
-                                                }
+                                if(res != undefined && res.FromUserName != undefined){
+                                    if(res.Content != ''){
+                                        var str = '';
+                                        var FromUserName = res.FromUserName;
+                                        var tuname = res.FromUserName;
+                                        var tnickname = res.fromNikeName;
+                                        var ToUserName = res.ToUserName;
+                                        var flag = false;
+                                        if(FromUserName.indexOf('@@')>-1){
+                                            tuname = res.people;
+                                            tnickname = res.peoplenickname;
+                                            flag = true;
+                                            var group = FromUserName;
+                                            var groupnikename = res.fromNikeName;
+                                            
+                                        }else if (ToUserName.indexOf('@@')>-1){
+                                            var group = ToUserName;
+                                            var groupnikename =  res.toNickName;
+                                            flag = true;
                                         }
-                                        //通讯成功再轮询
-                                        if (res.BaseResponse.Ret == 0){
-                                           sync(uuid);
+ 
+                                        if(flag){
+                                                if($('.m-list ul[uuid="'+uuid+'"] li[username="'+group+'"]').length==0){
+                                                                      var img = '/index.php/Index/index/avatar?uuid='+uuid+'&uri=' + escape(res.icon);
+                                                                      var html='';
+                                                                      html += '<li class="active" username="'+ group +'">'
+                                                                      +'<img class="avatar" width="30" height="30"  src="'+img+'" />'
+                                                                      +'<p class="name">'+ groupnikename +'</p>'
+                                                                      +'</li>';
+                                                                      $('.m-list ul[uuid="'+uuid+'"]').append(html);
+                                                              }
                                         }
-                                }else{
-                                    sync(uuid);
+                
+                                 
+
+                                        var uri = "/cgi-bin/mmwebwx-bin/webwxgeticon?seq=620940058&username="+ tuname +"&skey=";
+                                        var userHeadimg = '/index.php/Index/index/avatar?uuid='+uuid+'&uri=' + escape(uri);
+                                                        str += '<li>'
+                                        +'<p class="time"><span></span></p>'
+                                        +'<div class="main">'
+                                        +'<img class="avatar" width="30" height="30" src="'+ userHeadimg +'">'
+                                        +'<div class="nick">'+ tnickname + '</div>'
+                                        +'<div class="text">'+ res.Content +'</div>'
+                                        +'</div>'
+                                        +'</li>';
+                                        var fname = res.FromUserName;
+                                        if(sessionStorage[uuid+'username'] == fname){
+                                             fname =res.ToUserName;
+                                        }
+                                        if($('.m-message ul[FromUserName="'+fname+'"]').length>0){
+                                             $('.m-message ul[FromUserName="'+fname+'"]').append(str);
+                                        }else{
+                                             var ul = $("<ul FromUserName='"+fname+"'>"+str+"</ul>").hide();
+                                             $(".m-message").append(ul);
+                                        }
+                                        var first =$('.m-list ul[uuid="'+uuid+'"] li:first');
+                                        if(first.attr('username') != fname){
+                                             first.before($('.m-list ul[uuid="'+uuid+'"] li[username="'+fname+'"]'));
+                                        }
+                                
+                                    }
+                                    
                                 }
+                                sync(uuid);
+    
 			},
 			error : function(data){
 			}

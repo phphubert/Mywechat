@@ -117,7 +117,7 @@
             $data['uin']= @$uin[1];
             $data['sid']= @$sid[1];
       
-            $this->memcache->set($uuid.'logininfo',$data);
+            $this->memcache->set('LoginInfoBy'.$uuid,$data);
             $wxinfo = array(
                     'uin' => @$uin[1],
                     'sid' => @$sid[1]
@@ -126,11 +126,11 @@
             return $wxinfo;
 	}
     
-    
+        #初始化                    
         public function initWebchat($uin = '', $sid = ''){
                 $uuid = $this->uuid;
                 $cookie_jar = Cookie_path.DS.$uuid.".cookie";
-                $udata = $this->memcache->get($uuid.'logininfo');
+                $udata = $this->memcache->get('LoginInfoBy'.$uuid);
                
                 $apihost = $udata['apihost'];
                 $url = sprintf("https://%s/cgi-bin/mmwebwx-bin/webwxinit?r=%s",$apihost,$this->getMillisecond());
@@ -154,12 +154,22 @@
                 
                 
                 $res = json_encode($user);
-               
+                $GroupList = [];
+                if(isset($res['ContactList'])){
+                    $ContactList  = $res['ContactList'];
+                    foreach($ContactList as $v){
+                        if(strpos($v['UserName'] ,'@@') !==false){
+                            $GroupList[$v['UserName']] = $v;
+                        }
+                    }
+                }
+                
+                $this->memcache->set('GroupListBy'.$uuid,$GroupList);
                 $udata['username'] = $user['User']['UserName'];
                 $udata['nickname'] = $user['User']['NickName'];
                 $udata['DeviceID'] = $DeviceID;
                 $udata['initinfo'] = $user;
-                $this->memcache->set($uuid.'logininfo',$udata);
+                $this->memcache->set('LoginInfoBy'.$uuid,$udata);
  
                 return $res;
         }
@@ -168,7 +178,7 @@
  
 	public function  getAvatar($uri = ''){
                 $uuid = $this->uuid;
-                $udata = $this->memcache->get($uuid.'logininfo');
+                $udata = $this->memcache->get('LoginInfoBy'.$uuid);
                 $apihost = $udata['apihost'];
 	        $cookie = Cookie_path.DS.$uuid.".cookie";
 		$url = "https://".$apihost.$uri;
@@ -185,39 +195,92 @@
 	public function getContact(){
                 $uuid = $this->uuid;
 		$cookie_jar = Cookie_path.DS.$uuid.".cookie";
-                $udata = $this->memcache->get($uuid.'logininfo');
+                $udata = $this->memcache->get('LoginInfoBy'.$uuid);
                 $apihost = $udata['apihost'];
 		$url = sprintf("https://%s/cgi-bin/mmwebwx-bin/webwxgetcontact?lang=zh_CN&r=%s&seq=0", $apihost,$this->getMillisecond());
 
 		$res = $this->_post($url, '{}',false,false,$cookie_jar);
                 $res = json_decode($res,1);
- 
+                $GroupList = $this->memcache->get('GroupListBy'.$uuid);
+                $MemberList = $res['MemberList'];
+                
                 $contact = array();
-                if(!empty($res['MemberList'])){
-                    foreach ($res['MemberList'] as $k=>$v) {
+                if(!empty($MemberList)){
+                    foreach ($MemberList as $k=>$v) {
                         if (($v['VerifyFlag'] & 8) != 0) {  // 公众号/服务号
-                          unset($res['MemberList'][$k]);
-                      } elseif (in_array($v['UserName'], $this->special_users)) {   // 特殊账号
-                          unset($res['MemberList'][$k]); 
-                      } elseif ($v['UserName'] == $udata['username']) {  // 自己
-                            unset($res['MemberList'][$k]);
-                      }elseif (strpos($v['UserName'], '@@') !== false) { // 群聊
-                         //   unset($res['MemberList'][$k]);
-                      }
-                      $contact[$v['UserName']] = $v['NickName'];
+                            unset($MemberList[$k]);
+                        } elseif (in_array($v['UserName'], $this->special_users)) {   // 特殊账号
+                            unset($MemberList[$k]); 
+                        } elseif ($v['UserName'] == $udata['username']) {  // 自己
+                            unset($MemberList[$k]);
+                        }elseif (strpos($v['UserName'], '@@') !== false) { // 群聊
+                            unset($MemberList[$k]);
+                            $GroupList[$v['UserName']] = $v;
+                        }
+                            
                     }
                 }
+                            
+                $this->memcache->set('GroupListBy'.$uuid,$GroupList);
+                $this->memcache->set('ContactListBy'.$uuid,$MemberList);
+                $udata = $this->memcache->get('LoginInfoBy'.$uuid);
+                $this->webwxbatchgetcontact($GroupList);
+                $res = [
+                    'GroupList'=> $GroupList,
+                    'MemberList' => $MemberList
+                ];
                 
-                $udata = $this->memcache->get($uuid.'logininfo');
-                $username = $udata['username'] ;
-                $nickname = $udata['nickname'];
                 
-                $contact[$username] = $nickname;
-                $this->memcache->set($uuid.'contact',$contact);
                 $res = json_encode($res);
                 
 		return $res;
 	}
+        
+        
+	public function webwxbatchgetcontact($GroupList){//获取多个群的信息
+                $uuid = $this->uuid;
+                $udata = $this->memcache->get('LoginInfoBy'.$uuid);
+                $uin = $udata['uin'];
+                $sid = $udata['sid'];
+                $apihost = $udata['apihost'];
+                $pass_ticket = $udata['pass_ticket'];
+                $DeviceID = $udata['DeviceID'] ;
+                $url = sprintf('https://%s/cgi-bin/mmwebwx-bin/webwxbatchgetcontact?type=ex&r=%s&pass_ticket=%s',$apihost,time(),$pass_ticket);
+                
+                $List = [];
+                foreach ($GroupList as $g) {
+                        $List[] = ["UserName"=> $g['UserName'], "EncryChatRoomId"=>""];
+                }
+                
+                $BaseRequest = array(
+                         'Uin' => $uin,
+                         'Sid' => $sid,
+                         'Skey' => '',
+                         'DeviceID' => $DeviceID
+                         );
+                $params = [
+                    'BaseRequest'=> $BaseRequest,
+                    "Count"=> count($GroupList),
+                    "List"=> $List
+                ];
+                $dic = $this->_post($url, $params);
+                            
+                $ContactList = $dic['ContactList'];
+                $ContactCount = $dic['Count'];
+                $GroupMemeberList = [];
+                foreach($ContactList as $key=>$Contact){
+                    $MemberList = $Contact['MemberList'];
+                    foreach($MemberList as $member)
+                        $GroupMemeberList[] = $member;
+                }
+                
+                $this->memcache->set('GroupMemeberListBy'.$uuid,$GroupMemeberList);#群成员
+            
+               return true;
+	}
+        
+        
+        
         
  	/**
 	* 发送消息
@@ -227,7 +290,7 @@
 	**/
 	public function sendMessage( $toUsername = '', $content = ''){
                 $uuid = $this->uuid;
-                $udata = $this->memcache->get($uuid.'logininfo');
+                $udata = $this->memcache->get('LoginInfoBy'.$uuid);
                 $apihost = $udata['apihost'];
                 $uin = $udata['uin'];
                 $sid = $udata['sid'];
@@ -254,12 +317,69 @@
 		$res = $this->_post($url, $data,true,false,$cookie_jar);
 		return $res;
 	}
+        
+        
+        private function getGroupName($id){
+            $name = '未知群';
+            $uuid = $this->uuid;
+            $GroupList =  $this->memcache->get('GroupListBy'.$uuid);
+            
+            if(isset($GroupList[$id]))
+                $name = $GroupList[$id]['NickName'];
+            
+            if($name == '未知群'){
+                  $getGroupList = $this->getNameById($id);
+                  $GroupList[$id] = $getGroupList[0];
+                  $MemberList = $getGroupList[0]['MemberList'];
+                  $name = $getGroupList[0]['NickName'];
+                  $GroupMemeberList = $this->memcache->get('GroupMemeberListBy'.$uuid);
+                  foreach ($MemberList as $member){
+                       $GroupMemeberList[] = $member;
+                  }
+                  $this->memcache->set('GroupListBy'.$uuid,$GroupList);
+                  $this->memcache->set('GroupMemeberListBy'.$uuid,$GroupMemeberList);
+                                       
+            }
+            return $name;                                      
+        }
+        
+        private function getgroupicon($id){
+            $uuid = $this->uuid;
+            $GroupList =  $this->memcache->get('GroupListBy'.$uuid);
+            return isset($GroupList[$id])?$GroupList[$id]['HeadImgUrl']:'';
+        }
+                        
+        public function getUserRemarkName($id){
+             $name = substr($id,0,2) == '@@' ? '未知群':'陌生人';
+             $uuid = $this->uuid;
+             $udata = $this->memcache->get('LoginInfoBy'.$uuid);
+             if($id == $udata['username']){
+                 return $udata['nickname'];
+             }
+             
+             if(substr($id,0,2) == '@@'){
+                 $name = $this->getGroupName($id);
+             }else{
+                 $ContactList = $this->memcache->get('ContactListBy'.$uuid);
+                 foreach($ContactList as $member){
+                    if ($member['UserName'] == $id){
+                       $name =  $member['RemarkName']?$member['RemarkName']:$member['NickName'];
+                    }
+                 }
+                 $GroupMemeberList = $this->memcache->get('GroupMemeberListBy'.$uuid);
+                 foreach($GroupMemeberList as $member){
+                     if($member['UserName'] == $id){
+                         $name = $member['DisplayName'] ? $member['DisplayName'] : $member['NickName'];
+                     }
+                 }
+             }
+             return $name;                      
+        }
 
         public function wxsync(){
                 $uuid = $this->uuid;
-                $contact = $this->memcache->get($uuid.'contact');
-                $udata = $this->memcache->get($uuid.'logininfo');
-             
+                $udata = $this->memcache->get('LoginInfoBy'.$uuid);
+                            
                 $uin = $udata['uin'];
                 $sid = $udata['sid'];
                 
@@ -285,91 +405,88 @@
           
 		$res = $this->_post($url,$data,true,false,$cookie_jar);
                             
-                
+                $msgcontent = [];
                 if($res['AddMsgCount'] && $res['BaseResponse']['Ret']==0){
                     $udata['initinfo']['SyncKey'] = $res['SyncKey'];
-                    $this->memcache->set($uuid.'logininfo',$udata);
+                    $this->memcache->set('LoginInfoBy'.$uuid,$udata);#更新sysnckey
+                    $AddMsgList = $res['AddMsgList'];
                     
-                    foreach($res['AddMsgList'] as $k=>$msg){
-                        $content = $msg['Content'];
-                        $FromUserName =$msg['FromUserName'];
-                        $msgid = $msg['MsgId'];
-                        $ToUserName = $msg['ToUserName'];
-                        $MsgType = $msg['MsgType'];
- 
-                        
-                        $res['AddMsgList'][$k]['NickName'] =isset($contact[$FromUserName])?$contact[$FromUserName]:'null';
-                        if ( (substr( $FromUserName, 0, 2 ) == '@@' && stripos( $content, ':<br/>') !== false) || (substr( $ToUserName, 0, 2 ) == '@@' && $FromUserName = $ToUserName) ) {//群消息
-                            
-                              if(empty($groupinfo = $this->memcache->get($FromUserName))){
-                                   $groupinfo = $this->getNameById($FromUserName);
-                                   $this->memcache->set($FromUserName,$groupinfo,50);
-                              }
-
-                              if(!empty($groupinfo)){
-                                  $MemberList = $groupinfo['ContactList'][0]['MemberList'];
-                                  $groupname =  $groupinfo['ContactList'][0]['NickName'];
-                                  $groupicon =  $groupinfo['ContactList'][0]['HeadImgUrl'];
-                                  $res['AddMsgList'][$k]['groupname'] = $groupname;
-                                  $res['AddMsgList'][$k]['groupicon'] = $groupicon;
-                                  if(!isset($contact[$FromUserName])){
-                                      $res['AddMsgList'][$k]['noexist'] = 1;
-                                  }
-                                    if(stripos( $content, ':<br/>') !== false){
+                    
+                    
+                    if(count($AddMsgList) > 0){
+                        foreach($AddMsgList as $k=>$msg){
+                                   $content = $msg['Content'];
+                                   $FromUserName =$msg['FromUserName'];
+                                   $msgid = $msg['MsgId'];
+                                   $ToUserName = $msg['ToUserName'];
+                                   $MsgType = $msg['MsgType'];
+                                   $fromNikeName  = $this->getUserRemarkName($FromUserName);
+                                   $toNickName    = $this->getUserRemarkName($ToUserName);
+                                   
+                                   $msgcontent = [
+                                       'FromUserName'=> $FromUserName,
+                                       'ToUserName' => $ToUserName,
+                                       'fromNikeName' => $fromNikeName,
+                                       'toNickName' => $toNickName
+                                   ];
+                                   
+                                    if((substr( $FromUserName, 0, 2 ) == '@@' && stripos( $content, ':<br/>') !== false)){
                                         list($people, $content) = explode( ':<br/>', $content );
-                                        if($people){
-                                              foreach ($MemberList as $v){
-                                                  if($v['UserName'] ==$people){
-                                                      $res['AddMsgList'][$k]['NickName'] = $v['NickName'];
-                                                      break;
-                                                  }
-                                              }
-                                              $res['AddMsgList'][$k]['Fromgroupuname'] = $people;
-                                        }
+                                        $peoplenickname = $this->getUserRemarkName($people);
+                                        $msgcontent['peoplenickname'] = $peoplenickname;
+                                        $msgcontent['people'] = $people;
+                                        $msgcontent['icon'] = $this->getgroupicon($FromUserName);
+                                    }else if(substr( $ToUserName, 0, 2 ) == '@@'){
+                                        $msgcontent['icon'] = $this->getgroupicon($ToUserName);
                                     }
-                              }
-//                            unset($res['AddMsgList'][$k]);//先屏蔽
-                        }
-                        switch ($MsgType){
-                            case 1://文本消息
-                                $res['AddMsgList'][$k]['Content'] = $content;
-                                break;
-                            case 3;
-                                $this->getimage($msgid);//保存消息图片到本地
-                                $res['AddMsgList'][$k]['Content'] = sprintf("<img height='100px' width='100px' src='upload/%s.jpg'/>",$msgid);
-                                break;
-                            case 34://语音消息
-                                $res['AddMsgList'][$k]['Content'] = sprintf('<audio src="upload/mp3/%s.mp3" controls="controls"></audio>',$msgid);
-                                $this->getvoice_download($msgid);
-                                break;
-                            case 43://视频
-                                $res['AddMsgList'][$k]['Content'] = sprintf('<video src="upload/mp4/%s.mp4" width="320" height="200" controls preload></video>',$msgid);
-                                $this->webwxgetvoice_download($msgid);
-                                break;
-                             case 47: // 动画表情
-                                preg_match('/cdnurl\s*=\s*"(.+?)"/',$content,$match);//自定义的表情
-                                if(isset($match[1])){
-                                    $res['AddMsgList'][$k]['Content'] = "<img height='50px' width='50px' src='$match[1]'/>";
-                                }
-                                break;
-                            case 10002://撤回一条消息
-                                 unset($res['AddMsgList'][$k]);
-                                break;
-                            default:
-                                unset($res['AddMsgList'][$k]);
-                                break;
-                        }
-                            
+                        
+                                   $content = $this->handlemsg($msgid,$MsgType,$content);
+                                   $msgcontent['Content'] = $content;
+                        
+                               }
                     }
                 }
- 
-		return $res;
+		return $msgcontent;
 	}
         
- 
+        private function handlemsg($msgid,$MsgType,$content){
+                        
+                    switch ($MsgType){
+                        case 1://文本消息
+                            return $content;
+                            break;
+                        case 3;
+                            $this->getimage($msgid);//保存消息图片到本地
+                            return sprintf("<img height='100px' width='100px' src='upload/%s.jpg'/>",$msgid);
+                            break;
+                        case 34://语音消息
+                             $this->getvoice_download($msgid);
+                             return  sprintf('<audio src="upload/mp3/%s.mp3" controls="controls"></audio>',$msgid);
+                             break;
+                        case 43://视频
+                            $this->webwxgetvoice_download($msgid);
+                            return sprintf('<video src="upload/mp4/%s.mp4" width="320" height="200" controls preload></video>',$msgid);
+                            break;
+                         case 47: // 动画表情
+                            preg_match('/cdnurl\s*=\s*"(.+?)"/',$content,$match);//自定义的表情
+                            if(isset($match[1])){
+                                return  "<img height='50px' width='50px' src='$match[1]'/>";
+                            }
+                            break;
+                        case 10002://撤回一条消息
+                            return ''; 
+                            break;
+                        default:
+                            return '';
+                            break;
+                 }
+        }
+
+                        
+
         public function getNameById($groupusername){
              $uuid = $this->uuid;
-             $udata = $this->memcache->get($uuid.'logininfo');
+             $udata = $this->memcache->get('LoginInfoBy'.$uuid);
              $uin = $udata['uin'];
              $sid = $udata['sid'];
              $apihost = $udata['apihost'];
@@ -390,7 +507,7 @@
              ];
              $dic = $this->_post($url, $params,true,FALSE,$cookie_jar);
           
-             return $dic;
+             return $dic['ContactList'];
         }
         
      
@@ -400,7 +517,7 @@
             if (!is_file($file_name)) {
                 return false;
             }
-            $udata = $this->memcache->get($uuid.'logininfo');
+            $udata = $this->memcache->get('LoginInfoBy'.$uuid);
             $apihost = $udata['apihost'];
             $url = 'https://file.'.$apihost.'/cgi-bin/mmwebwx-bin/webwxuploadmedia?f=json';
    
@@ -484,7 +601,7 @@
         
         //发送图片消息
         public function webwxsendmsgimg($uuid,$ToUserName, $media_id){
-            $udata = $this->memcache->get($uuid.'logininfo');
+            $udata = $this->memcache->get('LoginInfoBy'.$uuid);
             $apihost = $udata['apihost'];
             $pass_ticket = $udata['pass_ticket'];
             $DeviceID = $udata['DeviceID'] ;
@@ -516,7 +633,7 @@
                             
         #发送文件
         public function webwxsendappmsg($uuid,$username,$mediaId,$file){
-            $udata = $this->memcache->get($uuid.'logininfo');
+            $udata = $this->memcache->get('LoginInfoBy'.$uuid);
             $apihost = $udata['apihost'];
             $pass_ticket = $udata['pass_ticket'];
             $DeviceID = $udata['DeviceID'] ;
@@ -554,7 +671,7 @@
 	public function  getimage( $msgid = ''){
                 $uuid = $this->uuid;
 	        $cookie_jar = Cookie_path.DS.$uuid.".cookie";
-                $udata = $this->memcache->get($uuid.'logininfo');
+                $udata = $this->memcache->get('LoginInfoBy'.$uuid);
                 $apihost = $udata['apihost'];
 		$url = "https://{$apihost}/cgi-bin/mmwebwx-bin/webwxgetmsgimg?&MsgID={$msgid}&skey=&type=big";
 		$res = $this->get($url, $cookie_jar);
@@ -569,7 +686,7 @@
         public function getvoice_download($msgid = ''){
             $uuid = $this->uuid;
             $cookie_jar = Cookie_path.DS.$uuid.".cookie";
-            $udata = $this->memcache->get($uuid.'logininfo');
+            $udata = $this->memcache->get('LoginInfoBy'.$uuid);
             $apihost = $udata['apihost'];
             $url = sprintf('https://%s/cgi-bin/mmwebwx-bin/webwxgetvoice?msgid=%s&skey=',$apihost,$msgid);
             $res = $this->get($url, $cookie_jar);
@@ -582,7 +699,7 @@
         public function webwxgetvoice_download($msgid){
                 $uuid = $this->uuid;
                 $cookie_jar = Cookie_path.DS.$uuid.".cookie";
-                $udata = $this->memcache->get($uuid.'logininfo');
+                $udata = $this->memcache->get('LoginInfoBy'.$uuid);
                 $apihost = $udata['apihost'];
                 
                 $apihost = $udata['apihost'];
@@ -611,7 +728,7 @@
          */
         public function synccheck(){
                 $uuid = $this->uuid;
-                $udata = $this->memcache->get($uuid.'logininfo');
+                $udata = $this->memcache->get('LoginInfoBy'.$uuid);
              
                 $uin = $udata['uin'];
                 $sid = $udata['sid'];
